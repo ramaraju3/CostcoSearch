@@ -1176,3 +1176,27 @@ def test_export_copy_drops_raw_payloads_and_private_meta(tmp_path):
     assert not list(dest.parent.glob(".*.tmp"))
     # the source is untouched
     assert con.execute("SELECT raw FROM purchases").fetchone()[0].startswith("{")
+
+
+def test_export_for_browsing_pushes_with_rsync(tmp_path, monkeypatch):
+    from costco_cli import config, sync
+    calls = []
+    monkeypatch.setattr(config, "EXPORT_DB", None)
+    monkeypatch.setattr(config, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(config, "PUSH_TO", "pi:/srv/costco.db")
+    monkeypatch.setattr(sync.subprocess, "run",
+                        lambda cmd, **kw: calls.append(cmd) or type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})())
+    logs = []
+    sync.export_for_browsing(db.connect(":memory:"), logs.append)
+    assert (tmp_path / "export" / "costco.db").exists()
+    assert calls[0][0] == "rsync" and calls[0][-1] == "pi:/srv/costco.db"
+    assert any("pushed" in m for m in logs)
+
+
+def test_export_for_browsing_off_by_default(monkeypatch):
+    from costco_cli import config, sync
+    monkeypatch.setattr(config, "EXPORT_DB", None)
+    monkeypatch.setattr(config, "PUSH_TO", None)
+    logs = []
+    sync.export_for_browsing(db.connect(":memory:"), logs.append)
+    assert logs == []

@@ -1,4 +1,5 @@
 """Pull new purchases, item names, online prices and the coupon book into SQLite."""
+import subprocess
 from collections import Counter
 from datetime import date, timedelta
 
@@ -82,9 +83,25 @@ def run(con, days=None, log=print, session=None):
     refresh_coupons(con, today, log)
     db.set_meta(con, "last_sync", today.isoformat())
     con.commit()
-    if config.EXPORT_DB:
-        try:
-            log(f"exported a copy for browsing to {db.export_copy(con, config.EXPORT_DB)}")
-        except OSError as e:  # never fail a good sync over the convenience copy
-            log(f"could not export a copy to {config.EXPORT_DB}: {e}")
+    export_for_browsing(con, log)
     return counts
+
+
+def export_for_browsing(con, log=print):
+    """Write the trimmed copy for the search page, and push it if configured.
+    Never raises: a good sync must not fail over the convenience copy."""
+    dest = config.EXPORT_DB or (config.PUSH_TO and config.DATA_DIR / "export" / "costco.db")
+    if not dest:
+        return
+    try:
+        path = db.export_copy(con, dest)
+        log(f"exported a copy for browsing to {path}")
+    except OSError as e:
+        log(f"could not export a copy to {dest}: {e}")
+        return
+    if config.PUSH_TO:
+        # rsync writes to a temp file and renames, so the server never sends half a file.
+        r = subprocess.run(["rsync", "-t", "-e", "ssh -o BatchMode=yes -o ConnectTimeout=15",
+                            str(path), config.PUSH_TO], capture_output=True, text=True)
+        log(f"pushed it to {config.PUSH_TO}" if r.returncode == 0
+            else f"could not push to {config.PUSH_TO}: {(r.stderr or r.stdout).strip()[:200]}")

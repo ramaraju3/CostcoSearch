@@ -7,7 +7,8 @@ BASE="${COSTCO_BASE:-$(dirname "$REPO")}"
 export COSTCO_CLI_HOME="${COSTCO_CLI_HOME:-$BASE/data}"
 # No Google Chrome here; Brave is Chromium and takes the same flags.
 export COSTCO_CLI_CHROME="${COSTCO_CLI_CHROME:-/Applications/Brave Browser.app/Contents/MacOS/Brave Browser}"
-# After each sync, a trimmed copy (no raw receipts, no alert settings) goes to
-# iCloud Drive for the search page on the phone. Set to "" to turn it off.
-export COSTCO_CLI_EXPORT_DB="${COSTCO_CLI_EXPORT_DB-$HOME/Library/Mobile Documents/com~apple~CloudDocs/Costco/costco.db}"
+# After each sync, a trimmed copy (no raw receipts, no alert settings) is written
+# to $BASE/data/export and pushed to the Pi, which serves it to the search page
+# over Tailscale. Set COSTCO_CLI_PUSH_TO="" to turn the push off.
+export COSTCO_CLI_PUSH_TO="${COSTCO_CLI_PUSH_TO-nani@nani:/home/nani/costco/data/costco.db}"
 exec "$BASE/.venv/bin/costco" "$@"

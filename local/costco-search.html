@@ -72,6 +72,9 @@
   .btn { border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 10px 16px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn:hover { filter: brightness(1.05); }
+  .srvrow { display: flex; gap: 8px; max-width: 560px; margin: 22px auto 0; }
+  .srvrow input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg); }
+  .or { color: var(--faint); font-size: 12px; margin-top: 18px; text-transform: uppercase; letter-spacing: .08em; }
   .privacy { display: inline-flex; align-items: center; gap: 6px; margin-top: 18px; font-size: 12.5px; color: var(--ok); background: var(--okbg); padding: 4px 10px; border-radius: 99px; }
 
   /* Stats */
@@ -187,6 +190,7 @@
         <div><h1>Purchase Search</h1><p id="synced">Your receipts, searchable</p></div>
       </div>
       <div style="display:flex;gap:8px">
+        <button class="iconbtn hidden" id="refresh" title="Load the latest from your server">Refresh</button>
         <button class="iconbtn hidden" id="swap" title="Open a different database">Change file</button>
         <button class="iconbtn" id="theme" title="Toggle theme" aria-label="Toggle theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
       </div>
@@ -199,11 +203,15 @@
 <main class="wrap">
   <section id="drop" class="card">
     <div class="big"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg></div>
-    <h2>Drop your <code>costco.db</code> here</h2>
+    <h2>Connect to your server</h2>
+    <p>The address that serves your <code>costco.db</code>, e.g. <code>https://pihole.&lt;tailnet&gt;.ts.net:8443/costco.db</code>. Saved in this browser only.</p>
+    <form class="srvrow" id="srvform"><input id="srv" type="url" inputmode="url" autocomplete="url" placeholder="https://…/costco.db" required><button class="btn primary" id="srvgo">Connect</button></form>
+    <div class="or">or open a file</div>
+    <h2 style="margin-top:10px">Drop your <code>costco.db</code> here</h2>
     <p><b>On your phone:</b> Files → iCloud Drive → Costco → <code>costco.db</code>.<br><b>On the Mac:</b> <code>~/code/Costco/data/costco.db</code> (in the dialog, <code>⌘⇧G</code> and paste).</p>
     <p style="margin-top:8px;font-size:13px">This browser keeps its own copy, so next time it opens straight to search. Pick the file again to update it.</p>
     <div class="btnrow">
-      <button class="btn primary" id="pick">Choose file</button>
+      <button class="btn" id="pick">Choose file</button>
       <button class="btn hidden" id="reopen">Reopen last file</button>
       <button class="btn hidden" id="forget">Forget saved copy</button>
     </div>
@@ -286,12 +294,38 @@ const idb = (mode, fn) => new Promise((res, rej) => {
 });
 const saveHandle = h => idb('readwrite', s => s.put(h, 'db')).catch(() => {});
 const canPick = 'showOpenFilePicker' in window;
+let live = null, offline = null;
+async function connect(url, quiet) {
+  const inApp = !$('app').classList.contains('hidden');
+  if (inApp) $('synced').textContent = 'Loading from your server…';
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    live = url; offline = null;
+    if (!(await openBytes(bytes))) { live = null; return false; }
+    store.set('server', url);
+    $('refresh').classList.remove('hidden');
+    idb('readwrite', s => s.put({ bytes, savedAt: Date.now() }, 'copy')).catch(() => {});
+    return true;
+  } catch (e) {
+    const msg = `Couldn't reach ${new URL(url).host} (${e.message}). Is Tailscale on?`;
+    if (inApp) $('synced').textContent = msg; else if (!quiet) showErr(new Error(msg));
+    return false;
+  }
+}
+$('srvform').onsubmit = e => { e.preventDefault(); connect($('srv').value.trim()); };
+$('refresh').onclick = () => store.get('server') && connect(store.get('server'));
 $('forget').onclick = () => idb('readwrite', s => s.delete('copy')).then(() => $('forget').classList.add('hidden')).catch(() => {});
 (async () => {
-  try {
-    const c = await idb('readonly', s => s.get('copy'));
-    if (c?.bytes) { $('forget').classList.remove('hidden'); await openBytes(c.bytes); }
-  } catch {}
+  const url = store.get('server');
+  if (url) { $('srv').value = url; $('refresh').classList.remove('hidden'); }
+  if (!(url && await connect(url, true))) {
+    try {
+      const c = await idb('readonly', s => s.get('copy'));
+      if (c?.bytes) { $('forget').classList.remove('hidden'); if (url) offline = c.savedAt; await openBytes(c.bytes); }
+    } catch {}
+  }
   try {
     const h = await idb('readonly', s => s.get('db'));
     if (h) { $('reopen').classList.remove('hidden'); $('reopen').onclick = async () => {
@@ -359,7 +393,8 @@ function renderSummary() {
     ['Unique items', (items || 0).toLocaleString(), `${money(s.refunds || 0, 0)} returned`],
   ].map(([k, v, sub, cls]) => `<div class="card stat"><div class="k">${k}</div><div class="v num ${cls || ''}">${v}</div><div class="s">${sub}</div></div>`).join('');
   const synced = one(`SELECT value FROM meta WHERE key = 'last_sync'`).value;
-  $('synced').textContent = (synced ? `Synced ${fmtDate(synced + 'T12:00')} · ` : '') + `latest purchase ${fmtDate(s.last)}`;
+  $('synced').textContent = (live ? 'Live from your server · ' : offline ? `Offline copy from ${fmtDate(offline)} · ` : '')
+    + (synced ? `synced ${fmtDate(synced + 'T12:00')} · ` : '') + `latest purchase ${fmtDate(s.last)}`;
   $('headline').innerHTML = `${money(s.net, 0)} across <span>${(s.trips || 0).toLocaleString()} trips.</span>`;
   $('subline').textContent = `Search ${items.toLocaleString()} different items. Click any result to see every price you've paid for it.`;
 }
