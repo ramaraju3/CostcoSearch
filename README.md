@@ -62,12 +62,12 @@ costco schedule install   # daily sync + notifications at 07:00
 | `costco returns [--days 30]` | Items still inside a return/adjustment window. |
 | `costco drops` | Price drops you can claim. |
 | `costco coupons [search] [--mine]` | Current warehouse coupon book. |
-| `costco schedule [install\|uninstall\|status] [--time HH:MM] [--weekly DAY]` | Background sync with alerts (launchd), daily or once a week. |
+| `costco schedule [install\|uninstall\|status] [--time HH:MM] [--weekly DAY] [--at "DAY HH:MM" ...]` | Background sync (launchd): daily, weekly, or several set times. |
 | `costco claim [item] [--skip] [--purchase ID] [--note ...]` | Settle a price adjustment; omit the item to pick from a list. |
 | `costco settled [--limit N]` | Adjustments you have already settled. |
 | `costco refunds [--days 90]` | What Costco actually refunded: returns and adjustments. |
 | `costco finds [--all] [--limit N]` | New and discounted items shoppers spotted, matched to what you buy. |
-| `costco notify [status\|email\|test\|macos]` | Where alerts go. |
+| `costco notify [status\|email\|test\|macos\|off]` | Where alerts go, or `off` for none. |
 | `costco summary [--send\|--days N\|--off]` | The periodic digest: print, send, or reschedule. |
 | `costco worker [status\|install\|uninstall]` | The task worker that delivers reminders. |
 | `costco server [status\|start\|stop]` | The LittleHorse server that holds the timers. |

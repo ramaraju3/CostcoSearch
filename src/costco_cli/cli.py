@@ -495,6 +495,9 @@ def cmd_daily(args, con):
         quiet = [d for d in fresh if not d.alertable]
         print(f"{len(fresh)} new price drops"
               + (f" ({len(quiet)} seasonal, no alert sent)" if quiet else ""))
+        if notify.channel(con) == "off":
+            print("alerts off: no claim reminders or summary")
+            return 0
         started, status = start_claim_runs(con, drops)
         if status is UNCHECKED:
             print("no claims waiting; claim tracking not contacted")
@@ -704,7 +707,7 @@ def cmd_status(args, con):
     print("\nDelivery")
     ch = notify.channel(con)
     s = notify.email_settings(con)
-    print(f"  alerts         {'email to ' + s['email_to'] if ch == 'email' and s else 'macOS notifications'}")
+    print(f"  alerts         {'off' if ch == 'off' else 'email to ' + s['email_to'] if ch == 'email' and s else 'macOS notifications'}")
     every = summary_interval(con)
     print(f"  summary        {'every ' + str(every) + ' day(s)' if every else 'off'}"
           f"   (last {db.get_meta(con, 'last_summary', 'never')})")
@@ -781,6 +784,10 @@ def cmd_notify(args, con):
     elif args.action == "test":
         used = notify.send(con, "costco-cli", "Test alert.")
         print(f"Sent via {used}.")
+    elif args.action == "off":
+        db.set_meta(con, "notify_channel", "off")
+        con.commit()
+        print("Alerts are off. Syncs still run; check `costco drops` or the search page yourself.")
     elif args.action == "macos":
         s = notify.email_settings(con)
         if s:
@@ -792,7 +799,9 @@ def cmd_notify(args, con):
         print("Alerts will use macOS notifications. Email settings and Keychain password removed.")
     else:
         s = notify.email_settings(con)
-        if notify.channel(con) == "email" and s:
+        if notify.channel(con) == "off":
+            print("Off: no alerts, reminders or summaries are sent")
+        elif notify.channel(con) == "email" and s:
             print(f"Email from {s['email_from']} to {s['email_to']} via {s['smtp_host']}:{s['smtp_port']}")
         else:
             print("macOS notifications on this computer")
@@ -800,9 +809,14 @@ def cmd_notify(args, con):
 
 def cmd_schedule(args, con):
     if args.action == "install":
-        hh, mm = (int(x) for x in args.time.split(":"))
-        wd = schedule.DAYS.index(args.weekly[:3].lower()) if args.weekly else None
-        path, cmd = schedule.install(hh, mm, wd)
+        try:
+            if args.at:
+                slots = [schedule.parse_slot(a) for a in args.at]
+            else:
+                slots = [schedule.parse_slot((args.weekly + " " if args.weekly else "") + args.time)]
+        except ValueError as e:
+            sys.exit(str(e))
+        path, cmd = schedule.install(slots=slots)
         print(f"{schedule.status()[0]}: {cmd}\nInstalled {path}\nLog: {config.LOG_DIR / 'daily.log'}")
     elif args.action == "uninstall":
         print("Removed." if schedule.uninstall() else "No schedule installed.")
@@ -897,8 +911,8 @@ def build_parser():
     p.add_argument("--limit", type=int, default=15, help="how many to show, default 15")
     p.set_defaults(fn=cmd_finds)
 
-    p = sub.add_parser("notify", help="where alerts go: macOS notifications or email")
-    p.add_argument("action", choices=["status", "email", "test", "macos"],
+    p = sub.add_parser("notify", help="where alerts go: macOS notifications, email, or off")
+    p.add_argument("action", choices=["status", "email", "test", "macos", "off"],
                    nargs="?", default="status")
     p.set_defaults(fn=cmd_notify)
 
@@ -921,6 +935,8 @@ def build_parser():
     p.add_argument("--weekly", metavar="DAY", choices=["sun", "mon", "tue", "wed", "thu", "fri", "sat",
                    "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
                    type=str.lower, help="run once a week on DAY (e.g. sun) instead of daily")
+    p.add_argument("--at", action="append", metavar="'DAY HH:MM'",
+                   help="a run time, repeatable: --at 'sat 09:00' --at 'sun 20:00' (overrides --time/--weekly)")
     p.set_defaults(fn=cmd_schedule)
 
     p = sub.add_parser("daily")  # what the scheduled job runs; no help, so unlisted

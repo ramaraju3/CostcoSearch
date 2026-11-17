@@ -1214,3 +1214,24 @@ def test_schedule_weekly_plist(tmp_path, monkeypatch):
     assert schedule.status()[0] == "Sundays at 20:00"
     schedule.install(7, 0)
     assert schedule.status()[0] == "Daily at 07:00"
+
+
+def test_schedule_two_weekly_slots(tmp_path, monkeypatch):
+    import plistlib
+    from costco_cli import config, schedule
+    monkeypatch.setattr(schedule, "PLIST", tmp_path / "job.plist")
+    monkeypatch.setattr(config, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(schedule.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    schedule.install(slots=[schedule.parse_slot("sat 09:00"), schedule.parse_slot("Sunday 20:00")])
+    t = plistlib.loads((tmp_path / "job.plist").read_bytes())["StartCalendarInterval"]
+    assert t == [{"Hour": 9, "Minute": 0, "Weekday": 6}, {"Hour": 20, "Minute": 0, "Weekday": 0}]
+    assert schedule.status()[0] == "Saturdays at 09:00, Sundays at 20:00"
+    with pytest.raises(ValueError):
+        schedule.parse_slot("someday 09:00")
+
+
+def test_notify_off_sends_nothing(monkeypatch):
+    con = db.connect(":memory:")
+    db.set_meta(con, "notify_channel", "off")
+    monkeypatch.setattr(notify, "_macos", lambda *a: pytest.fail("macOS notification sent"))
+    assert notify.send(con, "t", "m") == "off"

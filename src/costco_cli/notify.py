@@ -1,4 +1,4 @@
-"""Where alerts go: macOS notifications (default) or email.
+"""Where alerts go: macOS notifications (default), email, or off.
 
 The sending account's app password is kept in the macOS Keychain, never in the
 database or any file. The addresses and SMTP settings are stored in the local
@@ -103,7 +103,11 @@ def channel(con):
 
 def send(con, title, message):
     """Send an alert on the configured channel. Falls back to a macOS
-    notification if email fails, so an alert is never silently lost."""
+    notification if email fails, so an alert is never silently lost.
+    With the channel set to "off" nothing is sent; the job log keeps a line."""
+    if channel(con) == "off":
+        print(f"alert not sent (alerts off): {title}")
+        return "off"
     if channel(con) == "email":
         try:
             _email(con, title, message)
