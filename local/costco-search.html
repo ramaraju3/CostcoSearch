@@ -384,10 +384,13 @@ let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() 
 const ACTIVE = `SELECT item_number, MAX(discount) discount, MAX(valid_to) valid_to, MAX(name) name, MAX(price_after) price_after
   FROM coupons WHERE date('now','localtime') BETWEEN valid_from AND valid_to GROUP BY item_number`;
 function renderCoupons() {
-  const rows = q(`SELECT c.*, COUNT(*) times FROM (${ACTIVE}) c JOIN lines l ON l.item_number = c.item_number AND l.discount_for IS NULL AND l.amount > 0
+  const rows = q(`SELECT c.*, COUNT(*) times,
+      (SELECT (l2.amount + COALESCE((SELECT SUM(d.amount) FROM lines d WHERE d.purchase_id = l2.purchase_id AND d.discount_for = l2.item_number), 0)) / l2.quantity FROM lines l2 JOIN purchases p2 ON p2.id = l2.purchase_id
+        WHERE l2.item_number = c.item_number AND l2.discount_for IS NULL AND l2.amount > 0 ORDER BY p2.purchased_at DESC LIMIT 1) paid
+    FROM (${ACTIVE}) c JOIN lines l ON l.item_number = c.item_number AND l.discount_for IS NULL AND l.amount > 0
     GROUP BY c.item_number ORDER BY c.discount DESC`);
   $('coupons').innerHTML = rows.length ? rows.map(r => `<button class="coupon" data-item="${esc(r.item_number)}">
-      <span class="off num">−${money(r.discount, 0)}</span><span class="nm">${esc(r.name)}</span><span class="till">until ${fmtDate(r.valid_to + 'T12:00')}</span></button>`).join('')
+      <span class="off num">−${money(r.discount, 0)}</span><span class="nm">${esc(r.name)}</span><span class="till" title="Coupon good until ${fmtDate(r.valid_to + 'T12:00')}">paid ${money(r.paid)}${r.paid <= r.price_after + 0.005 ? ' ✓' : ''}</span></button>`).join('')
     : `<div class="empty">None of this book's coupons match what you usually buy.</div>`;
   $('coupons').querySelectorAll('.coupon').forEach(c => c.onclick = () => { $('q').value = c.dataset.item; state.open = null; search(); $('q').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
 }
@@ -414,11 +417,12 @@ function search() {
   if (state.recent) sql += ` AND date(p.purchased_at) >= date('now','localtime','-30 days')`;
   if (state.norefund) sql += ` AND l.amount >= 0 AND COALESCE(p.transaction_type,'') != 'Refund'`;
   if (state.month) { sql += ` AND substr(p.purchased_at,1,7) = ?`; params.push(state.month); }
-  sql += ({ new: ' ORDER BY p.purchased_at DESC', old: ' ORDER BY p.purchased_at ASC', hi: ' ORDER BY l.amount DESC', lo: ' ORDER BY l.amount ASC' })[state.sort];
+  sql += ({ new: ' ORDER BY p.purchased_at DESC', old: ' ORDER BY p.purchased_at ASC', hi: ' ORDER BY l.amount + COALESCE(savings, 0) DESC', lo: ' ORDER BY l.amount + COALESCE(savings, 0) ASC' })[state.sort];
   sql += ' LIMIT 301';
   const rows = q(sql, params);
   const more = rows.length > 300; if (more) rows.pop();
-  const total = rows.reduce((a, r) => a + (r.amount || 0), 0);
+  for (const r of rows) r.net = (r.amount || 0) + (r.savings || 0);
+  const total = rows.reduce((a, r) => a + r.net, 0);
   $('count').innerHTML = `<b>${rows.length}${more ? '+' : ''}</b> result${rows.length === 1 ? '' : 's'} · <span class="num">${money(total)}</span>`;
 
   const hl = terms.length ? new RegExp('(' + terms.map(reEsc).join('|') + ')', 'gi') : null;
@@ -437,9 +441,12 @@ function search() {
     const tags = [];
     if (refund) tags.push(`<span class="tag bad">Refund</span>`);
     else if (left >= 0 && r.source !== 'gas') tags.push(`<span class="tag ${left <= 7 ? 'warn' : 'ok'}">${left === 0 ? 'Last day' : left + 'd'} to adjust</span>`);
-    if (r.cdisc && !refund) tags.push(`<span class="tag info">Coupon −${money(r.cdisc, 0)} till ${fmtDate(r.cto + 'T12:00')}</span>`);
+    const qty = Math.abs(r.quantity || 1), gotEach = -(r.savings || 0) / qty, extra = (r.cdisc || 0) - gotEach;
+    if (r.cdisc && !refund && r.source === 'warehouse' && left >= 0 && extra > 0.005)
+      tags.push(`<span class="tag info">Coupon now: ${money(extra * qty)} back till ${fmtDate(r.cto + 'T12:00')}</span>`);
     const initial = (r.name || '?').replace(/^(kirkland signature|ks)\s+/i, '').trim()[0]?.toUpperCase() || '?';
     const each = r.quantity && Math.abs(r.quantity) !== 1 ? `${Math.abs(r.quantity)} × ${money(r.unit_price)}` : '';
+    const list = r.savings ? `<div class="each num"><s>${money(r.amount)}</s></div>` : '';
     return `<div class="row${state.open === key ? ' open' : ''}" data-key="${esc(key)}" data-item="${esc(r.item_number)}">
         <div class="av" style="${tint(r.department)}">${esc(initial)}</div>
         <div style="min-width:0">
@@ -447,7 +454,7 @@ function search() {
           <div class="meta"><span>${fmtDate(r.purchased_at)}</span><span class="mono">#${mark(r.item_number)}</span><span>${esc(r.location || '')} · ${esc(r.source)}</span>${r.name !== r.description ? `<span>${mark(r.description)}</span>` : ''}</div>
           ${tags.length ? `<div class="tags">${tags.join('')}</div>` : ''}
         </div>
-        <div class="price"><div class="amt num${r.amount < 0 ? ' neg' : ''}">${money(r.amount)}</div>${each ? `<div class="each num">${each}</div>` : ''}${r.savings ? `<div class="sav num">saved ${money(-r.savings)}</div>` : ''}</div>
+        <div class="price"><div class="amt num${r.net < 0 ? ' neg' : ''}">${money(r.net)}</div>${list}${each ? `<div class="each num">${each}</div>` : ''}${r.savings ? `<div class="sav num">saved ${money(-r.savings)}</div>` : ''}</div>
       </div>${state.open === key ? detail(r.item_number) : ''}`;
   }).join('') + (more ? `<div class="more">Showing the first 300. Narrow the search to see more.</div>` : '');
 
@@ -456,7 +463,7 @@ function search() {
 
 /* ---------- item detail ---------- */
 function detail(item) {
-  const h = q(`SELECT p.purchased_at d, p.location, l.unit_price u, l.quantity qty
+  const h = q(`SELECT p.purchased_at d, p.location, (l.amount + COALESCE((SELECT SUM(d.amount) FROM lines d WHERE d.purchase_id = l.purchase_id AND d.discount_for = l.item_number), 0)) / l.quantity u, l.quantity qty
     FROM lines l JOIN purchases p ON p.id = l.purchase_id
     WHERE l.item_number = ? AND l.discount_for IS NULL AND l.amount > 0 ORDER BY p.purchased_at`, [item]);
   if (!h.length) return '';
@@ -479,7 +486,7 @@ function detail(item) {
 
   return `<div class="detail">
     <div>
-      <h4>Price you paid over time</h4>${spark}
+      <h4>Price you paid over time <span style="text-transform:none;letter-spacing:0;font-weight:400">(after instant savings)</span></h4>${spark}
       <div class="hist">${h.slice().reverse().map(r => `<div><span>${fmtDate(r.d)} · ${esc(r.location || '')}</span><b class="num">${r.qty > 1 ? r.qty + ' × ' : ''}${money(r.u)}</b></div>`).join('')}</div>
     </div>
     <dl class="kv">
