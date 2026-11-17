@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import config
+from . import config, schedule
 
 WORKER_LABEL = "com.github.mdkocher.costco-cli.worker"
 WORKER_PLIST = Path.home() / "Library/LaunchAgents" / f"{WORKER_LABEL}.plist"
@@ -56,7 +56,7 @@ def worker_install():
         "ThrottleInterval": 300,
         "StandardOutPath": str(config.LOG_DIR / "worker.log"),
         "StandardErrorPath": str(config.LOG_DIR / "worker.log"),
-        "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"},
+        "EnvironmentVariables": schedule._job_env(),
     }
     WORKER_PLIST.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["launchctl", "unload", str(WORKER_PLIST)], check=False, capture_output=True)

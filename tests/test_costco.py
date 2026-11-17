@@ -1149,3 +1149,15 @@ def test_vocabulary_comes_from_what_you_actually_bought():
                                            [line("1707952", "KSOXI POWDER", 2, 29.98)], "R1"))
     vocab = finds.vocabulary(con)
     assert "ksoxi" in vocab and "powder" in vocab
+
+
+def test_schedule_job_keeps_costco_cli_settings(monkeypatch):
+    from costco_cli import schedule
+    monkeypatch.setenv("COSTCO_CLI_HOME", "/tmp/costco-data")
+    monkeypatch.setenv("COSTCO_CLI_CHROME", "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser")
+    monkeypatch.setenv("UNRELATED_SECRET", "x")
+    env = schedule._job_env()
+    assert env["COSTCO_CLI_HOME"] == "/tmp/costco-data"
+    assert env["COSTCO_CLI_CHROME"].endswith("Brave Browser")
+    assert "UNRELATED_SECRET" not in env
+    assert "/opt/homebrew/bin" in env["PATH"]

@@ -1,4 +1,5 @@
 """Daily background sync via launchd."""
+import os
 import plistlib
 import shutil
 import subprocess
@@ -18,6 +19,15 @@ def _costco_command():
     return [sys.executable, "-m", "costco_cli"]
 
 
+def _job_env():
+    """Environment for the launchd job. launchd starts it with almost nothing,
+    so carry over this tool's own settings (data folder, browser path, ports)
+    or the 07:00 run silently uses different ones than the shell that set it up."""
+    env = {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"}
+    env.update({k: v for k, v in os.environ.items() if k.startswith("COSTCO_CLI_")})
+    return env
+
+
 def install(hour, minute):
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     cmd = _costco_command()
@@ -27,7 +37,7 @@ def install(hour, minute):
         "StartCalendarInterval": {"Hour": hour, "Minute": minute},
         "StandardOutPath": str(config.LOG_DIR / "daily.log"),
         "StandardErrorPath": str(config.LOG_DIR / "daily.log"),
-        "EnvironmentVariables": {"PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"},
+        "EnvironmentVariables": _job_env(),
     }
     PLIST.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["launchctl", "unload", str(PLIST)], check=False, capture_output=True)
