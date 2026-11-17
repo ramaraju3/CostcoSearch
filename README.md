@@ -48,7 +48,7 @@ costco drops              # anything to claim?
 costco schedule install   # daily sync + notifications at 07:00
 ```
 
-`costco login` also runs the first sync, which pulls up to two years of history.
+`costco login` also runs the first sync, which pulls everything Costco still has: in practice about three years of warehouse receipts and online orders back to the start of the account.
 
 ## Commands
 
@@ -62,7 +62,7 @@ costco schedule install   # daily sync + notifications at 07:00
 | `costco returns [--days 30]` | Items still inside a return/adjustment window. |
 | `costco drops` | Price drops you can claim. |
 | `costco coupons [search] [--mine]` | Current warehouse coupon book. |
-| `costco schedule [install\|uninstall\|status] [--time HH:MM]` | Daily background sync with alerts (launchd). |
+| `costco schedule [install\|uninstall\|status] [--time HH:MM] [--weekly DAY]` | Background sync with alerts (launchd), daily or once a week. |
 | `costco claim [item] [--skip] [--purchase ID] [--note ...]` | Settle a price adjustment; omit the item to pick from a list. |
 | `costco settled [--limit N]` | Adjustments you have already settled. |
 | `costco refunds [--days 90]` | What Costco actually refunded: returns and adjustments. |

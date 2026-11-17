@@ -5,7 +5,9 @@ from datetime import date, timedelta
 
 from . import api, auth, config, db, savings
 
-FIRST_SYNC_DAYS = 730
+# First sync asks for 10 years: Costco returns whatever the account still has
+# (in practice ~3 years of warehouse receipts, online orders back to the start).
+FIRST_SYNC_DAYS = 3650
 WINDOW_DAYS = 180   # query receipts in chunks so long ranges stay small
 OVERLAP_DAYS = 7    # re-pull the last week to catch late-posting receipts
 

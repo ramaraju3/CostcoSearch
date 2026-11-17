@@ -103,7 +103,7 @@ This step needs the Mac's screen, so do it at the Mac or over Screen Sharing (no
 costco login
 ```
 
-A Chrome window opens on Costco's Orders & Purchases page. Sign in normally, including any verification code. Once you land on your account page, the window closes by itself and the first sync starts. It pulls up to two years of warehouse receipts, gas receipts and online orders; expect under a minute.
+A Chrome window opens on Costco's Orders & Purchases page. Sign in normally, including any verification code. Once you land on your account page, the window closes by itself and the first sync starts. It pulls everything Costco still has (about three years of warehouse and gas receipts, online orders back to the start); expect a few minutes.
 
 Check it worked:
 

@@ -1200,3 +1200,17 @@ def test_export_for_browsing_off_by_default(monkeypatch):
     logs = []
     sync.export_for_browsing(db.connect(":memory:"), logs.append)
     assert logs == []
+
+
+def test_schedule_weekly_plist(tmp_path, monkeypatch):
+    import plistlib
+    from costco_cli import config, schedule
+    monkeypatch.setattr(schedule, "PLIST", tmp_path / "job.plist")
+    monkeypatch.setattr(config, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(schedule.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    schedule.install(20, 0, 0)
+    t = plistlib.loads((tmp_path / "job.plist").read_bytes())["StartCalendarInterval"]
+    assert t == {"Hour": 20, "Minute": 0, "Weekday": 0}
+    assert schedule.status()[0] == "Sundays at 20:00"
+    schedule.install(7, 0)
+    assert schedule.status()[0] == "Daily at 07:00"

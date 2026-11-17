@@ -28,13 +28,18 @@ def _job_env():
     return env
 
 
-def install(hour, minute):
+DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]  # launchd Weekday: 0 = Sunday
+FULL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+
+def install(hour, minute, weekday=None):
+    """Run daily, or once a week when weekday (0 = Sunday ... 6) is given."""
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     cmd = _costco_command()
     plist = {
         "Label": LABEL,
         "ProgramArguments": cmd + ["daily"],
-        "StartCalendarInterval": {"Hour": hour, "Minute": minute},
+        "StartCalendarInterval": {"Hour": hour, "Minute": minute, **({"Weekday": weekday} if weekday is not None else {})},
         "StandardOutPath": str(config.LOG_DIR / "daily.log"),
         "StandardErrorPath": str(config.LOG_DIR / "daily.log"),
         "EnvironmentVariables": _job_env(),
@@ -59,5 +64,6 @@ def status():
         return None
     plist = plistlib.loads(PLIST.read_bytes())
     t = plist["StartCalendarInterval"]
+    when = (f"{FULL_DAYS[t['Weekday'] % 7]}s" if "Weekday" in t else "Daily") + f" at {t['Hour']:02d}:{t['Minute']:02d}"
     loaded = subprocess.run(["launchctl", "list", LABEL], capture_output=True).returncode == 0
-    return f"{t['Hour']:02d}:{t['Minute']:02d}", loaded
+    return when, loaded

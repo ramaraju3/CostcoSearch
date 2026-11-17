@@ -709,8 +709,8 @@ def cmd_status(args, con):
     print(f"  summary        {'every ' + str(every) + ' day(s)' if every else 'off'}"
           f"   (last {db.get_meta(con, 'last_summary', 'never')})")
     sched = schedule.status()
-    print(f"  daily job      {sched[0] + (' loaded' if sched[1] else ' NOT loaded')}" if sched
-          else "  daily job      not installed — costco schedule install")
+    print(f"  sync job       {sched[0] + (' loaded' if sched[1] else ' NOT loaded')}" if sched
+          else "  sync job       not installed — costco schedule install")
 
     print("\nClaim tracking")
     ok, detail = server_reachable()
@@ -801,13 +801,14 @@ def cmd_notify(args, con):
 def cmd_schedule(args, con):
     if args.action == "install":
         hh, mm = (int(x) for x in args.time.split(":"))
-        path, cmd = schedule.install(hh, mm)
-        print(f"Daily at {args.time}: {cmd}\nInstalled {path}\nLog: {config.LOG_DIR / 'daily.log'}")
+        wd = schedule.DAYS.index(args.weekly[:3].lower()) if args.weekly else None
+        path, cmd = schedule.install(hh, mm, wd)
+        print(f"{schedule.status()[0]}: {cmd}\nInstalled {path}\nLog: {config.LOG_DIR / 'daily.log'}")
     elif args.action == "uninstall":
         print("Removed." if schedule.uninstall() else "No schedule installed.")
     else:
         s = schedule.status()
-        print("No schedule installed." if not s else f"Daily at {s[0]} ({'loaded' if s[1] else 'not loaded'})")
+        print("No schedule installed." if not s else f"{s[0]} ({'loaded' if s[1] else 'not loaded'})")
 
 
 # ---------- parser ----------
@@ -914,9 +915,12 @@ def build_parser():
     p.add_argument("action", choices=["status", "start", "stop"], nargs="?", default="status")
     p.set_defaults(fn=cmd_server)
 
-    p = sub.add_parser("schedule", help="run sync + drop alerts daily in the background")
+    p = sub.add_parser("schedule", help="run sync + drop alerts daily or weekly in the background")
     p.add_argument("action", choices=["install", "uninstall", "status"], nargs="?", default="status")
     p.add_argument("--time", default="07:00", help="HH:MM, default 07:00")
+    p.add_argument("--weekly", metavar="DAY", choices=["sun", "mon", "tue", "wed", "thu", "fri", "sat",
+                   "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+                   type=str.lower, help="run once a week on DAY (e.g. sun) instead of daily")
     p.set_defaults(fn=cmd_schedule)
 
     p = sub.add_parser("daily")  # what the scheduled job runs; no help, so unlisted
