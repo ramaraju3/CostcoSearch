@@ -1,8 +1,10 @@
 """SQLite storage. One file at ~/.local/share/costco-cli/costco.db."""
 import json
+import os
 import re
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
 from . import config
 
@@ -81,6 +83,35 @@ def connect(path=None):
     con.execute("PRAGMA foreign_keys = ON")
     con.executescript(SCHEMA)
     return con
+
+
+# What a copy for browsing keeps from meta. Everything else (alert addresses,
+# SMTP settings, bookkeeping) stays on this Mac.
+EXPORT_META = ("last_sync",)
+
+
+def export_copy(con, dest):
+    """Write a trimmed, consistent copy of the database to dest for read-only use
+    elsewhere (the search page on a phone). Drops the raw API payloads, which
+    can carry membership and card details, and every meta row except
+    EXPORT_META. Written to a temp file and renamed, so a syncing folder never
+    sees a half-written database."""
+    dest = Path(dest).expanduser()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f".{dest.name}.tmp")
+    tmp.unlink(missing_ok=True)
+    out = sqlite3.connect(tmp)
+    try:
+        con.commit()
+        con.backup(out)
+        out.execute("UPDATE purchases SET raw = NULL")
+        out.execute(f"DELETE FROM meta WHERE key NOT IN ({','.join('?' * len(EXPORT_META))})", EXPORT_META)
+        out.commit()
+        out.execute("VACUUM")
+    finally:
+        out.close()
+    os.replace(tmp, dest)
+    return dest
 
 
 def get_meta(con, key, default=None):

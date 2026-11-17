@@ -1,0 +1,32 @@
+# Publishes ONLY the purchase search page to GitHub Pages, as index.html.
+# The page holds no data: each browser loads its own costco.db copy locally.
+name: Publish search page
+on:
+  push:
+    branches: [main]
+    paths: [local/costco-search.html, .github/workflows/pages.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir _site
+          cp local/costco-search.html _site/index.html
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

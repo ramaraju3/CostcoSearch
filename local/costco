@@ -7,4 +7,7 @@ BASE="${COSTCO_BASE:-$(dirname "$REPO")}"
 export COSTCO_CLI_HOME="${COSTCO_CLI_HOME:-$BASE/data}"
 # No Google Chrome here; Brave is Chromium and takes the same flags.
 export COSTCO_CLI_CHROME="${COSTCO_CLI_CHROME:-/Applications/Brave Browser.app/Contents/MacOS/Brave Browser}"
+# After each sync, a trimmed copy (no raw receipts, no alert settings) goes to
+# iCloud Drive for the search page on the phone. Set to "" to turn it off.
+export COSTCO_CLI_EXPORT_DB="${COSTCO_CLI_EXPORT_DB-$HOME/Library/Mobile Documents/com~apple~CloudDocs/Costco/costco.db}"
 exec "$BASE/.venv/bin/costco" "$@"

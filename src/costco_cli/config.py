@@ -6,6 +6,9 @@ DATA_DIR = Path(os.environ.get("COSTCO_CLI_HOME", Path.home() / ".local/share/co
 DB_PATH = DATA_DIR / "costco.db"
 PROFILE_DIR = DATA_DIR / "chrome-profile"
 LOG_DIR = DATA_DIR / "logs"
+# Optional: after each sync, write a trimmed copy of the database here (e.g. a
+# folder in iCloud Drive) for the search page on another device. Unset = off.
+EXPORT_DB = os.environ.get("COSTCO_CLI_EXPORT_DB") or None
 
 CHROME = os.environ.get(
     "COSTCO_CLI_CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"

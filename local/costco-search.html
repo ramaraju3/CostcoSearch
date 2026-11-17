@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <title>Purchase Search</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Purchases">
+<meta name="theme-color" content="#123a8c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -196,12 +200,14 @@
   <section id="drop" class="card">
     <div class="big"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/><path d="M3 12c0 1.7 4 3 9 3s9-1.3 9-3"/></svg></div>
     <h2>Drop your <code>costco.db</code> here</h2>
-    <p>It lives at <code>~/code/Costco/data/costco.db</code>. In the file dialog, press <code>⌘⇧G</code> and paste that path.</p>
+    <p><b>On your phone:</b> Files → iCloud Drive → Costco → <code>costco.db</code>.<br><b>On the Mac:</b> <code>~/code/Costco/data/costco.db</code> (in the dialog, <code>⌘⇧G</code> and paste).</p>
+    <p style="margin-top:8px;font-size:13px">This browser keeps its own copy, so next time it opens straight to search. Pick the file again to update it.</p>
     <div class="btnrow">
       <button class="btn primary" id="pick">Choose file</button>
       <button class="btn hidden" id="reopen">Reopen last file</button>
+      <button class="btn hidden" id="forget">Forget saved copy</button>
     </div>
-    <input type="file" id="file" accept=".db,.sqlite,application/octet-stream" class="hidden">
+    <input type="file" id="file" class="hidden">
     <div class="privacy"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Read in this browser only. Nothing is uploaded.</div>
     <p id="err" class="hidden" style="color:var(--bad);margin-top:14px"></p>
   </section>
@@ -280,7 +286,12 @@ const idb = (mode, fn) => new Promise((res, rej) => {
 });
 const saveHandle = h => idb('readwrite', s => s.put(h, 'db')).catch(() => {});
 const canPick = 'showOpenFilePicker' in window;
+$('forget').onclick = () => idb('readwrite', s => s.delete('copy')).then(() => $('forget').classList.add('hidden')).catch(() => {});
 (async () => {
+  try {
+    const c = await idb('readonly', s => s.get('copy'));
+    if (c?.bytes) { $('forget').classList.remove('hidden'); await openBytes(c.bytes); }
+  } catch {}
   try {
     const h = await idb('readonly', s => s.get('db'));
     if (h) { $('reopen').classList.remove('hidden'); $('reopen').onclick = async () => {
@@ -309,15 +320,21 @@ const showErr = e => { $('err').textContent = 'Could not open that file: ' + (e.
 
 /* ---------- load ---------- */
 async function load(file) {
+  let bytes;
+  try { bytes = new Uint8Array(await file.arrayBuffer()); } catch (e) { showErr(e); return; }
+  if (await openBytes(bytes)) idb('readwrite', s => s.put({ bytes, savedAt: Date.now() }, 'copy')).catch(() => {});
+}
+async function openBytes(bytes) {
   try {
     const SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` });
-    db = new SQL.Database(new Uint8Array(await file.arrayBuffer()));
+    db = new SQL.Database(bytes);
     q('SELECT 1 FROM purchases LIMIT 1');
-  } catch (e) { showErr(e); return; }
+  } catch (e) { showErr(e); return false; }
   $('err').classList.add('hidden');
   $('drop').classList.add('hidden'); $('app').classList.remove('hidden'); $('swap').classList.remove('hidden');
   renderSummary(); renderChart(); renderCoupons(); search();
-  $('q').focus();
+  if (!matchMedia('(pointer: coarse)').matches) $('q').focus();
+  return true;
 }
 
 /* ---------- summary ---------- */
@@ -341,7 +358,8 @@ function renderSummary() {
     ['Last 30 days', money(s.recent || 0, 0), `${win.n || 0} items still adjustable`],
     ['Unique items', (items || 0).toLocaleString(), `${money(s.refunds || 0, 0)} returned`],
   ].map(([k, v, sub, cls]) => `<div class="card stat"><div class="k">${k}</div><div class="v num ${cls || ''}">${v}</div><div class="s">${sub}</div></div>`).join('');
-  $('synced').textContent = `Latest purchase ${fmtDate(s.last)}`;
+  const synced = one(`SELECT value FROM meta WHERE key = 'last_sync'`).value;
+  $('synced').textContent = (synced ? `Synced ${fmtDate(synced + 'T12:00')} · ` : '') + `latest purchase ${fmtDate(s.last)}`;
   $('headline').innerHTML = `${money(s.net, 0)} across <span>${(s.trips || 0).toLocaleString()} trips.</span>`;
   $('subline').textContent = `Search ${items.toLocaleString()} different items. Click any result to see every price you've paid for it.`;
 }

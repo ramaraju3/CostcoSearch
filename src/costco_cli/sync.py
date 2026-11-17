@@ -82,4 +82,9 @@ def run(con, days=None, log=print, session=None):
     refresh_coupons(con, today, log)
     db.set_meta(con, "last_sync", today.isoformat())
     con.commit()
+    if config.EXPORT_DB:
+        try:
+            log(f"exported a copy for browsing to {db.export_copy(con, config.EXPORT_DB)}")
+        except OSError as e:  # never fail a good sync over the convenience copy
+            log(f"could not export a copy to {config.EXPORT_DB}: {e}")
     return counts

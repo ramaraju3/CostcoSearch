@@ -1161,3 +1161,18 @@ def test_schedule_job_keeps_costco_cli_settings(monkeypatch):
     assert env["COSTCO_CLI_CHROME"].endswith("Brave Browser")
     assert "UNRELATED_SECRET" not in env
     assert "/opt/homebrew/bin" in env["PATH"]
+
+
+def test_export_copy_drops_raw_payloads_and_private_meta(tmp_path):
+    con = db.connect(":memory:")
+    con.execute("INSERT INTO purchases (id, source, purchased_at, raw) VALUES ('r1', 'warehouse', '2026-11-01T10:00:00', '{\"membershipNumber\": \"111\"}')")
+    db.set_meta(con, "last_sync", "2026-11-16")
+    db.set_meta(con, "email_to", "someone@example.com")
+    dest = db.export_copy(con, tmp_path / "sub" / "costco.db")
+    import sqlite3
+    out = sqlite3.connect(dest)
+    assert out.execute("SELECT id, raw FROM purchases").fetchall() == [("r1", None)]
+    assert out.execute("SELECT key FROM meta").fetchall() == [("last_sync",)]
+    assert not list(dest.parent.glob(".*.tmp"))
+    # the source is untouched
+    assert con.execute("SELECT raw FROM purchases").fetchone()[0].startswith("{")
