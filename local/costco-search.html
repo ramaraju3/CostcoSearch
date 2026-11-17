@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Costco Purchase Search</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+<style>
+  :root { --bg:#fafaf9; --fg:#1c1917; --muted:#78716c; --line:#e7e5e4; --accent:#005daa; --ok:#15803d; --okbg:#dcfce7; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1c1917; --fg:#f5f5f4; --muted:#a8a29e; --line:#44403c; --accent:#60a5fa; --ok:#86efac; --okbg:#14532d; } }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.45 -apple-system, system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:1000px; margin:0 auto; padding:32px 20px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  #drop { border:2px dashed var(--line); border-radius:10px; padding:28px; text-align:center; color:var(--muted); }
+  #drop.over { border-color:var(--accent); }
+  #drop code { font-size:13px; }
+  input[type=search] { width:100%; font-size:17px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:transparent; color:var(--fg); }
+  .bar { display:flex; gap:12px; align-items:center; margin:12px 0; color:var(--muted); font-size:13px; flex-wrap:wrap; }
+  .bar label { display:flex; gap:4px; align-items:center; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .desc { color:var(--muted); font-size:12px; }
+  .badge { display:inline-block; font-size:11px; padding:1px 6px; border-radius:4px; background:var(--okbg); color:var(--ok); margin-left:6px; white-space:nowrap; }
+  .refund { color:#b91c1c; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Costco Purchase Search</h1>
+  <p class="sub">Reads your costco-cli database in this browser. Nothing is uploaded.</p>
+
+  <div id="drop">
+    Drop <code>costco.db</code> here, or <input type="file" id="file" accept=".db,.sqlite,application/octet-stream"><br>
+    <small>It lives at <code>~/code/Costco/data/costco.db</code>.</small>
+  </div>
+
+  <section id="app" class="hidden">
+    <input type="search" id="q" placeholder="Search item name or item number (e.g. eggs, towels, 1234567)" autofocus>
+    <div class="bar">
+      <span id="count"></span>
+      <label><input type="checkbox" id="recent"> Only last 30 days (price-adjustment window)</label>
+      <label><input type="checkbox" id="gas"> Include gas</label>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Item</th><th>Where</th>
+        <th class="num">Qty</th><th class="num">Unit price</th><th class="num">Paid</th><th class="num">Instant savings</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+let db;
+const $ = id => document.getElementById(id);
+const money = v => v == null ? '' : (v < 0 ? '-$' : '$') + Math.abs(v).toFixed(2);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const SQL_SEARCH = `
+SELECT p.purchased_at, p.source, p.location, p.transaction_type,
+       l.item_number, l.description, COALESCE(NULLIF(i.name, ''), l.description) AS name,
+       l.quantity, l.unit_price, l.amount,
+       (SELECT SUM(d.amount) FROM lines d
+         WHERE d.purchase_id = l.purchase_id AND d.discount_for = l.item_number) AS savings
+FROM lines l
+JOIN purchases p ON p.id = l.purchase_id
+LEFT JOIN items i ON i.item_number = l.item_number
+WHERE l.discount_for IS NULL`;
+
+async function load(file) {
+  const SQL = await initSqlJs({ locateFile: f => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}` });
+  db = new SQL.Database(new Uint8Array(await file.arrayBuffer()));
+  $('drop').classList.add('hidden');
+  $('app').classList.remove('hidden');
+  $('q').focus();
+  search();
+}
+
+function search() {
+  const terms = $('q').value.trim().split(/\s+/).filter(Boolean);
+  let sql = SQL_SEARCH, params = [];
+  for (const t of terms) {
+    sql += ` AND (l.description LIKE ? OR i.name LIKE ? OR l.item_number = ?)`;
+    params.push(`%${t}%`, `%${t}%`, t);
+  }
+  if (!$('gas').checked) sql += ` AND p.source != 'gas'`;
+  if ($('recent').checked) sql += ` AND date(p.purchased_at) >= date('now', 'localtime', '-30 days')`;
+  sql += ` ORDER BY p.purchased_at DESC LIMIT 500`;
+
+  const stmt = db.prepare(sql);
+  stmt.bind(params);
+  const cutoff = Date.now() - 30 * 864e5;
+  let html = '', n = 0;
+  while (stmt.step()) {
+    const r = stmt.getAsObject(); n++;
+    const when = new Date(r.purchased_at);
+    const inWindow = when.getTime() >= cutoff && r.amount > 0;
+    const refund = r.amount < 0 || /refund/i.test(r.transaction_type || '');
+    html += `<tr class="${refund ? 'refund' : ''}">
+      <td>${when.toLocaleDateString()}${inWindow ? '<span class="badge">≤30 days</span>' : ''}</td>
+      <td>${esc(r.name)}${refund ? ' (refund)' : ''}<div class="desc">#${esc(r.item_number)}${r.name !== r.description ? ' · ' + esc(r.description) : ''}</div></td>
+      <td>${esc(r.location)}<div class="desc">${esc(r.source)}</div></td>
+      <td class="num">${r.quantity ?? ''}</td>
+      <td class="num">${money(r.unit_price)}</td>
+      <td class="num">${money(r.amount)}</td>
+      <td class="num">${r.savings ? money(r.savings) : ''}</td>
+    </tr>`;
+  }
+  stmt.free();
+  $('rows').innerHTML = html;
+  $('count').textContent = `${n}${n === 500 ? '+' : ''} purchase${n === 1 ? '' : 's'}`;
+}
+
+$('file').onchange = e => e.target.files[0] && load(e.target.files[0]);
+const drop = $('drop');
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && load(e.dataTransfer.files[0]); };
+for (const id of ['q', 'recent', 'gas']) $(id).addEventListener('input', search);
+</script>
+</body>
+</html>

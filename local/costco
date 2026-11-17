@@ -1,0 +1,10 @@
+#!/bin/bash
+# Runs costco-cli with all data (database, browser profile, logs) kept beside
+# the repo: <base>/.venv and <base>/data, where <base> is the repo's parent
+# folder (override with COSTCO_BASE). Works when called directly or via symlink.
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+BASE="${COSTCO_BASE:-$(dirname "$REPO")}"
+export COSTCO_CLI_HOME="${COSTCO_CLI_HOME:-$BASE/data}"
+# No Google Chrome here; Brave is Chromium and takes the same flags.
+export COSTCO_CLI_CHROME="${COSTCO_CLI_CHROME:-/Applications/Brave Browser.app/Contents/MacOS/Brave Browser}"
+exec "$BASE/.venv/bin/costco" "$@"
