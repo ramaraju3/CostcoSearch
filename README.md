@@ -1,4 +1,55 @@
-# costco-cli
+# CostcoSearch
+
+Search every Costco purchase you've made — warehouse, online and gas — from your phone or any browser, and see what's still inside the 30-day price-adjustment window.
+
+**Open it:** https://ramaraju3.github.io/CostcoSearch/
+
+Your purchases never touch GitHub. The page is only code; the data comes from your own server.
+
+```
+Mac (sync on a schedule)  ──rsync──▶  Raspberry Pi  ──Tailscale HTTPS──▶  CostcoSearch page (phone / laptop)
+ pulls receipts from              serves one file,             loads it in the browser;
+ your Costco account              tailnet devices only         nothing is uploaded
+```
+
+## What it adds to costco-cli
+
+A fork of [mdkocher/costco-cli](https://github.com/mdkocher/costco-cli). On top of it:
+
+- **CostcoSearch page** (`local/costco-search.html`, published by GitHub Pages): spending totals, a spend-by-month chart, coupons on things you've bought, filters, and a per-item price history. Prices are what you actually paid, after instant savings. It loads the database live from your server and falls back to the last copy it saw when you're offline.
+- **Serve from a Pi over Tailscale** (`local/serve_db.py`): serves only the database file, bound to localhost, readable only by the CostcoSearch page; `tailscale serve` adds HTTPS.
+- **Push after every sync** (`COSTCO_CLI_PUSH_TO`): a trimmed copy goes to the Pi. Raw receipt data (which can hold membership and card details) and alert settings are left out.
+- **Set run times** — `costco schedule install --at "sat 09:00" --at "sun 20:00"` — instead of only daily.
+- **Alerts can be turned off** (`costco notify off`): syncs still run, nothing is sent.
+- **Full history:** the first sync asks for 10 years and keeps whatever Costco still has.
+- **Brave works as the browser** for sign-in, and background jobs keep your `COSTCO_CLI_*` settings.
+
+## Setting it up
+
+On the Mac, with this repo at `<base>/costco-cli`:
+
+```bash
+./costco-cli/local/setup.sh                 # .venv and data/ go in <base>, outside the repo
+./costco login                              # sign in once in the browser window
+./costco schedule install --at "sat 09:00" --at "sun 20:00"
+./costco notify off                         # optional: no alerts
+```
+
+On the Pi (Tailscale installed, HTTPS enabled for your tailnet):
+
+```bash
+mkdir -p ~/costco/data
+python3 ~/costco/serve_db.py --file ~/costco/data/costco.db --port 8790 \
+    --origin https://ramaraju3.github.io      # run it as a systemd service
+sudo tailscale serve --bg --https=8443 http://127.0.0.1:8790
+```
+
+Set `COSTCO_CLI_PUSH_TO=you@pi:/home/you/costco/data/costco.db` (see `local/costco`). Then open CostcoSearch and connect to `https://<pi>.<tailnet>.ts.net:8443/costco.db`. Brave and Chrome will ask to allow access to devices on your local network; choose **Allow**.
+
+---
+
+# costco-cli (upstream documentation)
+
 
 Track your Costco purchases and catch price adjustments from the terminal. No phone app, no third-party service: your receipts are pulled from your own Costco account into a local SQLite file.
 
@@ -30,13 +81,13 @@ $14.40 in possible price adjustments. Bring the receipt to the membership counte
 Requires macOS, Python 3.10+, and Google Chrome.
 
 ```bash
-pipx install git+https://github.com/mdkocher/costco-cli
+pipx install git+https://github.com/ramaraju3/CostcoSearch
 ```
 
 Or with pip:
 
 ```bash
-pip install git+https://github.com/mdkocher/costco-cli
+pip install git+https://github.com/ramaraju3/CostcoSearch
 ```
 
 ## Quick start
@@ -241,7 +292,7 @@ Full walkthrough, including email setup and troubleshooting: **[docs/SETUP.md](d
 Short version:
 
 1. Install Google Chrome and Python 3 (`brew install python pipx`).
-2. `pipx install git+https://github.com/mdkocher/costco-cli`
+2. `pipx install git+https://github.com/ramaraju3/CostcoSearch`
 3. `costco login`. This needs the Mac's screen; Screen Sharing from another Mac works.
 4. `costco notify email`
 5. `costco schedule install --time 07:00`
@@ -286,7 +337,7 @@ Delete that folder (and run `costco notify macos` first if you set up email) to 
 ## Development
 
 ```bash
-git clone https://github.com/mdkocher/costco-cli && cd costco-cli
+git clone https://github.com/ramaraju3/CostcoSearch && cd CostcoSearch
 python3.12 -m venv .venv && ./.venv/bin/pip install -e '.[dev]'
 ./.venv/bin/pytest
 ```

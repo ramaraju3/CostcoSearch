@@ -23,7 +23,8 @@ costco = "costco_cli.cli:main"
 costco-worker = "costco_cli.lh:worker_main"
 
 [project.urls]
-Homepage = "https://github.com/mdkocher/costco-cli"
+Homepage = "https://github.com/ramaraju3/CostcoSearch"
+Upstream = "https://github.com/mdkocher/costco-cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

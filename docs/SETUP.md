@@ -84,7 +84,7 @@ Open a new Terminal window so the PATH change takes effect.
 ### costco-cli
 
 ```bash
-pipx install git+https://github.com/mdkocher/costco-cli
+pipx install git+https://github.com/ramaraju3/CostcoSearch
 ```
 
 Check it:
