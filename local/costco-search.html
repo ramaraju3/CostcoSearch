@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Purchase Search</title>
+<title>CostcoSearch</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Purchases">
+<meta name="apple-mobile-web-app-title" content="CostcoSearch">
 <meta name="theme-color" content="#123a8c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -187,7 +187,7 @@
     <div class="topbar">
       <div class="brand">
         <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg></div>
-        <div><h1>Purchase Search</h1><p id="synced">Your receipts, searchable</p></div>
+        <div><h1>CostcoSearch</h1><p id="synced">Your receipts, searchable</p></div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="iconbtn hidden" id="refresh" title="Load the latest from your server">Refresh</button>
@@ -260,7 +260,7 @@
     </div>
 
     <div class="card" id="rows"></div>
-    <footer>Data from costco-cli · run <span class="mono">costco sync</span> and reload the file for the latest</footer>
+    <footer>CostcoSearch · your data stays on your own devices</footer>
   </section>
 </main>
 <div class="tip" id="tip"></div>
@@ -309,7 +309,7 @@ async function connect(url, quiet) {
     idb('readwrite', s => s.put({ bytes, savedAt: Date.now() }, 'copy')).catch(() => {});
     return true;
   } catch (e) {
-    const msg = `Couldn't reach ${new URL(url).host} (${e.message}). Is Tailscale on?`;
+    const msg = `Couldn't reach ${new URL(url).host}. Check that Tailscale is on, and if the browser asked about devices on your local network, choose Allow.`;
     if (inApp) $('synced').textContent = msg; else if (!quiet) showErr(new Error(msg));
     return false;
   }
