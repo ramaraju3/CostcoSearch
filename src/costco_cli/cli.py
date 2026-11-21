@@ -444,7 +444,7 @@ def alert_failure(con, what, exc):
     print(f"{what}: {type(exc).__name__}: {exc}")
     traceback.print_exc()
     try:
-        notify.send(con, "costco-cli failed", f"{what}: {type(exc).__name__}: {exc}")
+        notify.send(con, "costco-cli failed", f"{what}: {type(exc).__name__}: {exc}", failure=True)
     except Exception as e:
         print(f"could not send the failure alert: {e}")
 
@@ -485,9 +485,13 @@ def cmd_daily(args, con):
     except auth.AuthError as e:
         print(e)
         try:
-            notify.send(con, "costco-cli", "Costco sign-in expired. Run: costco login on the sync Mac")
+            notify.send(con, "costco-cli", "Costco sign-in expired. Run: costco login on the sync Mac",
+                        failure=True)
         except Exception as ne:
             print(f"alert failed: {ne}")
+        return 1
+    except Exception as e:
+        alert_failure(con, "sync failed", e)
         return 1
     try:
         drops = prices.find_drops(con)
@@ -495,8 +499,8 @@ def cmd_daily(args, con):
         quiet = [d for d in fresh if not d.alertable]
         print(f"{len(fresh)} new price drops"
               + (f" ({len(quiet)} seasonal, no alert sent)" if quiet else ""))
-        if notify.channel(con) == "off":
-            print("alerts off: no claim reminders or summary")
+        if notify.quiet(con):
+            print(f"alerts {notify.channel(con)}: no claim reminders or summary")
             return 0
         started, status = start_claim_runs(con, drops)
         if status is UNCHECKED:
@@ -707,7 +711,7 @@ def cmd_status(args, con):
     print("\nDelivery")
     ch = notify.channel(con)
     s = notify.email_settings(con)
-    print(f"  alerts         {'off' if ch == 'off' else 'email to ' + s['email_to'] if ch == 'email' and s else 'macOS notifications'}")
+    print(f"  alerts         {'off' if ch == 'off' else 'sync failures only (macOS)' if ch == 'failures' else 'email to ' + s['email_to'] if ch == 'email' and s else 'macOS notifications'}")
     every = summary_interval(con)
     print(f"  summary        {'every ' + str(every) + ' day(s)' if every else 'off'}"
           f"   (last {db.get_meta(con, 'last_summary', 'never')})")
@@ -782,12 +786,18 @@ def cmd_notify(args, con):
         notify.send(con, "costco-cli", "Email alerts are set up.")
         print("Sent.")
     elif args.action == "test":
-        used = notify.send(con, "costco-cli", "Test alert.")
+        used = notify.send(con, "costco-cli", "Test alert.", failure=True)
         print(f"Sent via {used}.")
     elif args.action == "off":
         db.set_meta(con, "notify_channel", "off")
         con.commit()
         print("Alerts are off. Syncs still run; check `costco drops` or the search page yourself.")
+    elif args.action == "failures":
+        db.set_meta(con, "notify_channel", "failures")
+        con.commit()
+        print("Only failed syncs (e.g. an expired sign-in) will alert you, as a macOS notification. "
+              "No price drops, reminders or summaries.")
+        notify.send(con, "costco-cli", "Sync-failure alerts are on.", failure=True)
     elif args.action == "macos":
         s = notify.email_settings(con)
         if s:
@@ -801,6 +811,8 @@ def cmd_notify(args, con):
         s = notify.email_settings(con)
         if notify.channel(con) == "off":
             print("Off: no alerts, reminders or summaries are sent")
+        elif notify.channel(con) == "failures":
+            print("Sync failures only, as macOS notifications; no drops, reminders or summaries")
         elif notify.channel(con) == "email" and s:
             print(f"Email from {s['email_from']} to {s['email_to']} via {s['smtp_host']}:{s['smtp_port']}")
         else:
@@ -911,8 +923,8 @@ def build_parser():
     p.add_argument("--limit", type=int, default=15, help="how many to show, default 15")
     p.set_defaults(fn=cmd_finds)
 
-    p = sub.add_parser("notify", help="where alerts go: macOS notifications, email, or off")
-    p.add_argument("action", choices=["status", "email", "test", "macos", "off"],
+    p = sub.add_parser("notify", help="where alerts go: macOS notifications, email, failures only, or off")
+    p.add_argument("action", choices=["status", "email", "test", "macos", "failures", "off"],
                    nargs="?", default="status")
     p.set_defaults(fn=cmd_notify)
 

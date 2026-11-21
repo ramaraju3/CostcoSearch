@@ -20,7 +20,7 @@ A fork of [mdkocher/costco-cli](https://github.com/mdkocher/costco-cli). On top 
 - **Serve from a Pi over Tailscale** (`local/serve_db.py`): serves only the database file, bound to localhost, readable only by the CostcoSearch page; `tailscale serve` adds HTTPS.
 - **Push after every sync** (`COSTCO_CLI_PUSH_TO`): a trimmed copy goes to the Pi. Raw receipt data (which can hold membership and card details) and alert settings are left out.
 - **Set run times** — `costco schedule install --at "sat 09:00" --at "sun 20:00"` — instead of only daily.
-- **Alerts can be turned off** (`costco notify off`): syncs still run, nothing is sent.
+- **Alerts can be turned off** (`costco notify off`): syncs still run, nothing is sent. Or `costco notify failures`: only a failed sync (usually an expired sign-in) alerts you, as a macOS notification.
 - **Full history:** the first sync asks for 10 years and keeps whatever Costco still has.
 - **Brave works as the browser** for sign-in, and background jobs keep your `COSTCO_CLI_*` settings.
 
@@ -32,7 +32,7 @@ On the Mac, with this repo at `<base>/costco-cli`:
 ./costco-cli/local/setup.sh                 # .venv and data/ go in <base>, outside the repo
 ./costco login                              # sign in once in the browser window
 ./costco schedule install --at "sat 09:00" --at "sun 20:00"
-./costco notify off                         # optional: no alerts
+./costco notify failures                    # optional: only alert when a sync fails
 ```
 
 On the Pi (Tailscale installed, HTTPS enabled for your tailnet):
@@ -118,7 +118,7 @@ costco schedule install   # daily sync + notifications at 07:00
 | `costco settled [--limit N]` | Adjustments you have already settled. |
 | `costco refunds [--days 90]` | What Costco actually refunded: returns and adjustments. |
 | `costco finds [--all] [--limit N]` | New and discounted items shoppers spotted, matched to what you buy. |
-| `costco notify [status\|email\|test\|macos\|off]` | Where alerts go, or `off` for none. |
+| `costco notify [status\|email\|test\|macos\|failures\|off]` | Where alerts go; `failures` for failed syncs only, `off` for none. |
 | `costco summary [--send\|--days N\|--off]` | The periodic digest: print, send, or reschedule. |
 | `costco worker [status\|install\|uninstall]` | The task worker that delivers reminders. |
 | `costco server [status\|start\|stop]` | The LittleHorse server that holds the timers. |

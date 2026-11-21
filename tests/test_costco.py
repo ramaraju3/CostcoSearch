@@ -1257,3 +1257,21 @@ def test_notify_off_sends_nothing(monkeypatch):
     db.set_meta(con, "notify_channel", "off")
     monkeypatch.setattr(notify, "_macos", lambda *a: pytest.fail("macOS notification sent"))
     assert notify.send(con, "t", "m") == "off"
+
+
+def test_failures_channel_sends_only_failures(monkeypatch):
+    con = db.connect(":memory:")
+    db.set_meta(con, "notify_channel", "failures")
+    shown = []
+    monkeypatch.setattr(notify, "_macos", lambda title, message: shown.append(title))
+    assert notify.quiet(con)
+    assert notify.send(con, "Costco price drop", "x") == "off"
+    assert notify.send(con, "costco-cli", "sign-in expired", failure=True) == "macos"
+    assert shown == ["costco-cli"]
+
+
+def test_off_channel_sends_nothing_even_failures(monkeypatch):
+    con = db.connect(":memory:")
+    db.set_meta(con, "notify_channel", "off")
+    monkeypatch.setattr(notify, "_macos", lambda *a: pytest.fail("should not notify"))
+    assert notify.send(con, "costco-cli", "sign-in expired", failure=True) == "off"
