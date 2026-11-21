@@ -220,6 +220,16 @@ def save_online_order(con, o):
                 str(l.get("itemNumber") or ""), l.get("itemDescription"), l.get("quantity"),
                 l.get("price"), l.get("merchandiseTotalAmount"), None, None,
             ))
+    # Online orders carry savings only as an order-wide discountAmount, with
+    # lines at full price. When the order is all one item, that discount can
+    # only be for it, so record it the way warehouse receipts do (a negative
+    # line tied to the item) and net prices come out right. Mixed orders stay
+    # as they are: there is no telling which item the discount was on.
+    discount = o.get("discountAmount") or 0
+    items = {l[0] for l in lines}
+    if discount > 0 and len(items) == 1 and "" not in items:
+        item = items.pop()
+        lines.append((item, "Online discount", 1, -discount, -discount, None, item))
     _replace_purchase(con, {
         "id": o["orderNumber"],
         "source": "online",

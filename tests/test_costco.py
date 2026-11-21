@@ -69,6 +69,28 @@ def test_drops_coupon_and_online():
     assert drops["O1"].total == 8.0
 
 
+def _online(number, discount, *items):
+    return {"orderNumber": number, "orderPlacedDate": "2026-11-18T12:58:23", "status": "Delivered",
+            "orderTotal": 0, "discountAmount": discount, "orderShipTos": [{"orderLineItems": [
+                {"itemNumber": i, "itemDescription": i, "quantity": 1, "price": p,
+                 "merchandiseTotalAmount": p, "isFeeItem": False} for i, p in items]}]}
+
+
+def test_online_discount_tied_to_single_item():
+    con = db.connect(":memory:")
+    db.save_online_order(con, _online("O1", 50.0, ("3000116", 239.99)))
+    rows = con.execute("SELECT item_number, amount, discount_for FROM lines ORDER BY line_no").fetchall()
+    assert [tuple(r) for r in rows] == [("3000116", 239.99, None), ("3000116", -50.0, "3000116")]
+    db.save_online_order(con, _online("O1", 50.0, ("3000116", 239.99)))  # re-sync doesn't double it
+    assert con.execute("SELECT COUNT(*) FROM lines").fetchone()[0] == 2
+
+
+def test_online_discount_left_alone_on_mixed_order():
+    con = db.connect(":memory:")
+    db.save_online_order(con, _online("O2", 300.0, ("A", 279.99), ("B", 1999.99)))
+    assert con.execute("SELECT COUNT(*) FROM lines WHERE discount_for IS NOT NULL").fetchone()[0] == 0
+
+
 def test_no_drop_when_coupon_already_applied():
     today = date(2026, 10, 20)
     con = db.connect(":memory:")
