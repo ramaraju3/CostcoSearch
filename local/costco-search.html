@@ -57,6 +57,10 @@
   .hero-title { margin: 36px 0 0; font-size: clamp(28px, 5vw, 44px); line-height: 1.08; font-weight: 800; letter-spacing: -.03em; max-width: 720px; }
   .hero-title span { background: linear-gradient(90deg, #ffd2cc, #fff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .hero-sub { margin: 10px 0 0; opacity: .8; max-width: 560px; }
+  .syncbadge { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 6px 12px; border-radius: 99px; font-size: 13px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); }
+  .syncbadge::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #5ad69a; flex: none; }
+  .syncbadge.stale { background: var(--warnbg); color: var(--warn); border-color: transparent; }
+  .syncbadge.stale::before { background: currentColor; }
 
   main.wrap { padding: 0 16px 64px; margin-top: -64px; position: relative; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
@@ -197,6 +201,7 @@
     </div>
     <h2 class="hero-title" id="headline">Everything you've bought, <span>one search away.</span></h2>
     <p class="hero-sub" id="subline">Find any item, see what you paid every time, and catch what's still inside the 30-day price-adjustment window.</p>
+    <div class="syncbadge hidden" id="syncbadge" role="status"></div>
   </div>
 </header>
 
@@ -465,12 +470,33 @@ function renderSummary() {
     ['Last 30 days', money(s.recent || 0, 0), `${win.n || 0} items still adjustable`],
     ['Unique items', (items || 0).toLocaleString(), `${money(s.refunds || 0, 0)} returned`],
   ].map(([k, v, sub, cls]) => `<div class="card stat"><div class="k">${k}</div><div class="v num ${cls || ''}">${v}</div><div class="s">${sub}</div></div>`).join('');
-  const synced = one(`SELECT value FROM meta WHERE key = 'last_sync'`).value;
   $('synced').textContent = (live ? 'Live from your server · ' : offline ? `Offline copy from ${fmtDate(offline)} · ` : '')
-    + (synced ? `synced ${fmtDate(synced + 'T12:00')} · ` : '') + `latest purchase ${fmtDate(s.last)}`;
+    + `latest purchase ${fmtDate(s.last)}`;
+  renderSyncBadge();
   $('headline').innerHTML = `${money(s.net, 0)} across <span>${(s.trips || 0).toLocaleString()} trips.</span>`;
   $('subline').textContent = `Search ${items.toLocaleString()} different items. Click any result to see every price you've paid for it.`;
 }
+
+/* Last sync, from the Mac's job. It runs Sat + Sun, so anything over 8 days
+   means runs are failing (usually an expired Costco sign-in). */
+const STALE_DAYS = 8;
+function renderSyncBadge() {
+  const el = $('syncbadge');
+  let at = null, hasTime = false;
+  try { at = one(`SELECT value FROM meta WHERE key = 'last_sync_at'`).value; hasTime = !!at; } catch {}
+  if (!at) { try { const d = one(`SELECT value FROM meta WHERE key = 'last_sync'`).value; if (d) at = d + 'T12:00'; } catch {} }
+  if (!at) { el.classList.add('hidden'); return; }
+  const when = new Date(at);
+  const days = Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(when).setHours(0, 0, 0, 0)) / DAY);
+  const ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
+  const date = when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  const time = hasTime ? ' at ' + when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '';
+  const stale = days > STALE_DAYS;
+  el.textContent = `Last synced ${date}${time} · ${ago}` + (stale ? ' — sign-in may have expired. Run costco login on the Mac.' : '');
+  el.classList.toggle('stale', stale);
+  el.classList.remove('hidden');
+}
+setInterval(() => db && renderSyncBadge(), 60 * 60 * 1000);
 
 /* ---------- chart ---------- */
 function renderChart() {

@@ -87,7 +87,7 @@ def connect(path=None):
 
 # What a copy for browsing keeps from meta. Everything else (alert addresses,
 # SMTP settings, bookkeeping) stays on this Mac.
-EXPORT_META = ("last_sync",)
+EXPORT_META = ("last_sync", "last_sync_at")
 
 
 def export_copy(con, dest):

@@ -1,7 +1,7 @@
 """Pull new purchases, item names, online prices and the coupon book into SQLite."""
 import subprocess
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from . import api, auth, config, db, savings
 
@@ -84,6 +84,7 @@ def run(con, days=None, log=print, session=None):
     refresh_items(con, today, log)
     refresh_coupons(con, today, log)
     db.set_meta(con, "last_sync", today.isoformat())
+    db.set_meta(con, "last_sync_at", datetime.now().astimezone().isoformat(timespec="seconds"))
     con.commit()
     export_for_browsing(con, log)
     return counts
